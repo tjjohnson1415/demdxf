@@ -1,0 +1,22 @@
+[project]
+name = "demdxf"
+version = "0.1.0"
+description = "This package converts DEMs to CAD drawings (DXF)."
+authors = [
+    { name="Tim Johnson", email="tjjohnson1415@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.9"
+
+dependencies = [
+	"numpy",
+	"scikit-image",
+	"shapely",
+	"ezdxf",
+	"matplotlib",
+	"rasterio"
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

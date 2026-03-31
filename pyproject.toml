@@ -14,7 +14,9 @@ dependencies = [
 	"shapely",
 	"ezdxf",
 	"matplotlib",
-	"rasterio"
+	"rasterio",
+	"laspy",
+	"scipy",
 ]
 
 [build-system]

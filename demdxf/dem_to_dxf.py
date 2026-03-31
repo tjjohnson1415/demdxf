@@ -3,7 +3,7 @@ from skimage import measure
 from shapely.geometry import Point, LineString, Polygon
 import ezdxf
 import matplotlib.pyplot as plt
-from dem_preprocessing import display_dem
+from demdxf.dem_preprocessing import display_dem
 
 def _get_contour_levels(dem, contour_interval):
     '''

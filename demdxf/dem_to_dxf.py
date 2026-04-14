@@ -1,6 +1,7 @@
 import numpy as np
 from skimage import measure
 from shapely.geometry import Point, LineString, Polygon, MultiPolygon, GeometryCollection
+from shapely.affinity import scale
 from shapely.ops import split, unary_union
 import ezdxf
 import matplotlib.pyplot as plt
@@ -60,31 +61,27 @@ def _process_and_add_lines_to_msp(lines, msp, scaling_factor):
         plt.plot(x, y, color = 'red')
         
 
-def split_bbox_by_contours(bbox_polygon, contour_lines, eps=1.0):
+def extend_line_to_bbox(line, bbox):
     """
-    Split the bounding box polygon using contour lines.
-    eps expands the box outward so contours actually intersect it.
+    Extend a contour line slightly outward so it intersects the bounding box.
     """
+    # Scale the line around its centroid by a small factor
+    # 1.02 = extend by 2%
+    return scale(line, xfact=1.02, yfact=1.02, origin='center')
+    
+    
+def split_bbox_by_contours(bbox_polygon, contour_lines):
+    # Extend contours so they actually intersect the bounding box
+    extended = [extend_line_to_bbox(line, bbox_polygon) for line in contour_lines]
 
-    # Expand outward so contours intersect the boundary
-    expanded_bbox = bbox_polygon.buffer(eps)
+    merged = unary_union(extended)
+    result = split(bbox_polygon, merged)
 
-    # Merge all contour lines into one geometry
-    merged = unary_union(contour_lines)
-
-    # Split the expanded box
-    result = split(expanded_bbox, merged)
-
-    # Normalize output to always be iterable
+    # Normalize output
     if isinstance(result, GeometryCollection):
-        pieces = list(result.geoms)
+        return list(result.geoms)
     else:
-        pieces = [result]
-
-    # Shrink pieces back to original size
-    final_pieces = [p.buffer(-eps) for p in pieces]
-
-    return final_pieces
+        return [result]
 
 
 def create_dxf_drawings(dem, contour_interval, model_width, output_directory, simplify_tolerance = 1):
@@ -139,7 +136,7 @@ def create_dxf_drawings(dem, contour_interval, model_width, output_directory, si
         ])
         
         # Split bounding box by contour lines
-        bbox_pieces = split_bbox_by_contours(bbox_poly, simplified_lines, eps=1.0)
+        bbox_pieces = split_bbox_by_contours(bbox_poly, simplified_lines)
 
         for piece in bbox_pieces:
             # If the piece is a MultiPolygon, iterate through its parts

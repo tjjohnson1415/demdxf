@@ -1,6 +1,6 @@
 import numpy as np
 from skimage import measure
-from shapely.geometry import Point, LineString, Polygon
+from shapely.geometry import Point, LineString, Polygon, GeometryCollection
 from shapely.ops import split, unary_union
 import ezdxf
 import matplotlib.pyplot as plt
@@ -58,16 +58,33 @@ def _process_and_add_lines_to_msp(lines, msp, scaling_factor):
         #plot the contour lines
         x, y = line.xy
         plt.plot(x, y, color = 'red')
+        
 
+def split_bbox_by_contours(bbox_polygon, contour_lines, eps=1.0):
+    """
+    Split the bounding box polygon using contour lines.
+    eps expands the box outward so contours actually intersect it.
+    """
 
-def split_bbox_by_contours(bbox_polygon, contour_lines):
-    # merge all contour lines into one geometry
+    # Expand outward so contours intersect the boundary
+    expanded_bbox = bbox_polygon.buffer(eps)
+
+    # Merge all contour lines into one geometry
     merged = unary_union(contour_lines)
 
-    # split the bounding box by the merged contour geometry
-    result = split(bbox_polygon, merged)
+    # Split the expanded box
+    result = split(expanded_bbox, merged)
 
-    return list(result)
+    # Normalize output to always be iterable
+    if isinstance(result, GeometryCollection):
+        pieces = list(result.geoms)
+    else:
+        pieces = [result]
+
+    # Shrink pieces back to original size
+    final_pieces = [p.buffer(-eps) for p in pieces]
+
+    return final_pieces
 
 
 def create_dxf_drawings(dem, contour_interval, model_width, output_directory, simplify_tolerance = 1):
@@ -122,7 +139,7 @@ def create_dxf_drawings(dem, contour_interval, model_width, output_directory, si
         ])
         
         # Split bounding box by contour lines
-        bbox_pieces = split_bbox_by_contours(bbox_poly, simplified_lines)
+        bbox_pieces = split_bbox_by_contours(bbox_poly, simplified_lines, eps=1.0)
         
         # Add each piece to DXF
         for piece in bbox_pieces:

@@ -157,8 +157,8 @@ def create_dxf_drawings(dem, contour_interval, model_width, output_directory, si
             seg_model = LineString(pts_model)
 
             # filter out very short segments
-            if seg_model.length < MIN_SEGMENT_LENGTH_MM:
-                continue
+            #if seg_model.length < MIN_SEGMENT_LENGTH_MM:
+                #continue
 
             msp.add_lwpolyline(pts_model.tolist())
 

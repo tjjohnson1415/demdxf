@@ -1,6 +1,6 @@
 import numpy as np
 from skimage import measure
-from shapely.geometry import Point, LineString, Polygon, GeometryCollection
+from shapely.geometry import Point, LineString, Polygon, MultiPolygon, GeometryCollection
 from shapely.ops import split, unary_union
 import ezdxf
 import matplotlib.pyplot as plt
@@ -140,12 +140,24 @@ def create_dxf_drawings(dem, contour_interval, model_width, output_directory, si
         
         # Split bounding box by contour lines
         bbox_pieces = split_bbox_by_contours(bbox_poly, simplified_lines, eps=1.0)
-        
-        # Add each piece to DXF
+
         for piece in bbox_pieces:
-            pts = np.array(piece.exterior.coords)
-            pts_model = pts * 1000 * scaling_factor
-            msp.add_lwpolyline(pts_model.tolist(), close=True)
+            # If the piece is a MultiPolygon, iterate through its parts
+            if isinstance(piece, MultiPolygon):
+                polys = list(piece.geoms)
+            else:
+                polys = [piece]
+        
+            for poly in polys:
+                # Skip empty or invalid geometries
+                if not isinstance(poly, Polygon):
+                    continue
+                if poly.is_empty:
+                    continue
+        
+                pts = np.array(poly.exterior.coords)
+                pts_model = pts * 1000 * scaling_factor
+                msp.add_lwpolyline(pts_model.tolist(), close=True)
             
         if msp: #only save CAD file if polylines were added
             output_path = f'{output_directory}/contours{int(level)}.dxf'

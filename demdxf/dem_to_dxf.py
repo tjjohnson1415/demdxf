@@ -1,11 +1,12 @@
 import numpy as np
 from skimage import measure
-from shapely.geometry import Point, LineString, Polygon, MultiPolygon, GeometryCollection
+from shapely.geometry import Point, LineString, Polygon, GeometryCollection
 from shapely.affinity import scale
 from shapely.ops import split, unary_union
 import ezdxf
 import matplotlib.pyplot as plt
 from demdxf.dem_preprocessing import display_dem
+
 
 def _get_contour_levels(dem, contour_interval):
     '''
@@ -26,7 +27,7 @@ def _get_scaling_factor(dem, model_width):
         dem - DEM
         model_width - width of model in the longer direction in millimeters
     '''
-    dem_width = max(dem.shape) * 1000 # width of DEM in mm
+    dem_width = max(dem.shape) * 1000  # width of DEM in mm
     scaling_factor = model_width / dem_width
 
     return scaling_factor
@@ -40,51 +41,59 @@ def _process_and_add_lines_to_msp(lines, msp, scaling_factor):
         scaling_factor - scaling_factor determined by the `get_scaling_factor` function
     '''
     for line in lines:
-        dem_points = np.array(line.coords) #convert shapely lines to numpy array
-        model_points = dem_points * 1000 * scaling_factor #scale point to model scale
-        
-        scaled_line = LineString(model_points) #convert numpy array back to shapely lines
-        
+        dem_points = np.array(line.coords)  # convert shapely lines to numpy array
+        model_points = dem_points * 1000 * scaling_factor  # scale point to model scale
+
+        scaled_line = LineString(model_points)  # convert numpy array back to shapely lines
+
         try:
-            polygon = Polygon(scaled_line.coords) #create a polygon from the line
-        except:
+            polygon = Polygon(scaled_line.coords)  # create a polygon from the line
+        except Exception:
             continue
-        
-        #check each polygon to make sure it is larger than 1 cm^2. Small polygons will not be added to the drawing
-        if polygon.area < 100:
-            continue
-        
-        msp.add_lwpolyline(model_points.tolist()) #add each polyline to the CAD drawing point by point
 
-        #plot the contour lines
+        # check each polygon to make sure it is larger than 1 cm^2. Small polygons will not be added
+        if polygon.area < 100:  # mm²
+            continue
+
+        msp.add_lwpolyline(model_points.tolist())  # add each polyline to the CAD drawing
+
+        # plot the contour lines
         x, y = line.xy
-        plt.plot(x, y, color = 'red')
-        
+        plt.plot(x, y, color='red')
 
-def extend_line_to_bbox(line, bbox):
+
+def extend_line_to_bbox(line):
     """
-    Extend a contour line slightly outward so it intersects the bounding box.
+    Extend a contour line slightly outward so it is more likely to intersect the bounding box.
     """
-    # Scale the line around its centroid by a small factor
-    # 1.02 = extend by 2%
+    # Scale the line around its centroid by a small factor (2% outward)
     return scale(line, xfact=1.02, yfact=1.02, origin='center')
-    
-    
-def split_bbox_by_contours(bbox_polygon, contour_lines):
-    # Extend contours so they actually intersect the bounding box
-    extended = [extend_line_to_bbox(line, bbox_polygon) for line in contour_lines]
+
+
+def split_bbox_line_by_contours(bbox_line, contour_lines):
+    """
+    Split the bounding box *line* using the contour lines.
+    Returns a list of LineString segments.
+    """
+    # Extend contours so they are more likely to intersect the bbox
+    extended = [extend_line_to_bbox(line) for line in contour_lines]
 
     merged = unary_union(extended)
-    result = split(bbox_polygon, merged)
+    result = split(bbox_line, merged)
 
-    # Normalize output
+    # Normalize output to a list of geometries
     if isinstance(result, GeometryCollection):
-        return list(result.geoms)
+        geoms = list(result.geoms)
     else:
-        return [result]
+        geoms = [result]
+
+    # Keep only LineStrings
+    segments = [g for g in geoms if isinstance(g, LineString) and not g.is_empty]
+
+    return segments
 
 
-def create_dxf_drawings(dem, contour_interval, model_width, output_directory, simplify_tolerance = 1):
+def create_dxf_drawings(dem, contour_interval, model_width, output_directory, simplify_tolerance=1):
     '''
     Function for converting DEMs to DXF drawings
         dem - DEM
@@ -95,80 +104,68 @@ def create_dxf_drawings(dem, contour_interval, model_width, output_directory, si
     '''
     contour_levels = _get_contour_levels(dem, contour_interval)
     scaling_factor = _get_scaling_factor(dem, model_width)
-    
-    #loop through each contour level
+
+    # loop through each contour level
     for i, level in enumerate(contour_levels):
-        contours = measure.find_contours(dem, level) #use sci-kit image to find the edges of features
-        lines = [LineString((c - 1)[:, ::-1]) for c in contours] #convert contours into vector data. Trim off padded edges
-    
-        simplified_lines = [line.simplify(simplify_tolerance) for line in lines] #simplify geometry
-        
-        #add contours from the level above for stacking outline
+        contours = measure.find_contours(dem, level)  # use sci-kit image to find the edges of features
+        lines = [LineString((c - 1)[:, ::-1]) for c in contours]  # convert contours into vector data
+
+        simplified_lines = [line.simplify(simplify_tolerance) for line in lines]  # simplify geometry
+
+        # add contours from the level above for stacking outline
         if i + 1 < len(contour_levels):
-            next_contours = measure.find_contours(dem, contour_levels[i + 1]) #find edges of next level features
-            next_lines = [LineString((c - 1)[:, ::-1]) for c in next_contours] #convert contours into vector data and trim off edges
-            simplified_lines.extend([line.simplify(simplify_tolerance) for line in next_lines]) #simplify geometry
-        
-        #make sure lines exist before proceeding.
+            next_contours = measure.find_contours(dem, contour_levels[i + 1])
+            next_lines = [LineString((c - 1)[:, ::-1]) for c in next_contours]
+            simplified_lines.extend([line.simplify(simplify_tolerance) for line in next_lines])
+
+        # make sure lines exist before proceeding
         if not simplified_lines:
             continue
-        
-        #create a new CAD drawing file. This file should be readable by CNC machines
+
+        # create a new CAD drawing file
         doc = ezdxf.new()
-        doc.header['$INSUNITS'] = 3 #set drawing units to mm
+        doc.header['$INSUNITS'] = 3  # set drawing units to mm
         msp = doc.modelspace()
-        
-        #add lines to the drawing
+
+        # add contour lines to the drawing
         _process_and_add_lines_to_msp(simplified_lines, msp, scaling_factor)
-        
+
         h, w = dem.shape
-        '''
-        bbox_dem_points = np.array([
-            [0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1], [0, 0]
-        ])
-        bbox_model_points = bbox_dem_points * 1000 * scaling_factor
-        msp.add_lwpolyline(bbox_model_points.tolist())
-        '''
 
-        # Create bounding box polygon in DEM coordinates
-        bbox_poly = Polygon([
-            (0, 0), (w - 1, 0), (w - 1, h - 1), (0, h - 1)
+        # Create bounding box as a LineString in DEM coordinates
+        bbox_line = LineString([
+            (0, 0),
+            (w - 1, 0),
+            (w - 1, h - 1),
+            (0, h - 1),
+            (0, 0)
         ])
-        
-        # Split bounding box by contour lines
-        bbox_pieces = split_bbox_by_contours(bbox_poly, simplified_lines)
 
-        for piece in bbox_pieces:
-            # If the piece is a MultiPolygon, iterate through its parts
-            if isinstance(piece, MultiPolygon):
-                polys = list(piece.geoms)
-            else:
-                polys = [piece]
-        
-            for poly in polys:
-                if not isinstance(poly, Polygon):
-                    continue
-                if poly.is_empty:
-                    continue
-            
-                # Only keep pieces that touch the original bbox boundary
-                if not poly.boundary.intersects(bbox_poly.boundary):
-                    continue
-            
-                pts = np.array(poly.exterior.coords)
-                pts_model = pts * 1000 * scaling_factor
-                poly_model = Polygon(pts_model)
-            
-                if poly_model.area < 100:
-                    continue
-            
-                msp.add_lwpolyline(pts_model.tolist(), close=True)
-            
-        if msp: #only save CAD file if polylines were added
+        # Split bounding box line by contour lines
+        bbox_segments = split_bbox_line_by_contours(bbox_line, simplified_lines)
+
+        # Minimum segment length in model units (mm) to keep (e.g., 10 mm)
+        MIN_SEGMENT_LENGTH_MM = 10.0
+
+        # Add each bbox segment to DXF, filtering out tiny ones
+        for seg in bbox_segments:
+            if not isinstance(seg, LineString) or seg.is_empty:
+                continue
+
+            pts = np.array(seg.coords)
+            pts_model = pts * 1000 * scaling_factor
+            seg_model = LineString(pts_model)
+
+            # filter out very short segments
+            if seg_model.length < MIN_SEGMENT_LENGTH_MM:
+                continue
+
+            msp.add_lwpolyline(pts_model.tolist())
+
+        if msp:  # only save CAD file if polylines were added
             output_path = f'{output_directory}/contours{int(level)}.dxf'
             doc.saveas(output_path)
             print(f'Drawing saved to {output_path}')
-            pass
-            
-    #plot DEM and show plot
+
+    # plot DEM and show plot
     display_dem(dem)

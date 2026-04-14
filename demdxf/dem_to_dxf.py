@@ -141,6 +141,9 @@ def create_dxf_drawings(dem, contour_interval, model_width, output_directory, si
             (0, 0)
         ])
 
+        msp.add_lwpolyline(bbox_line.tolist())
+
+        '''
         # Split bounding box line by contour lines
         bbox_segments = split_bbox_line_by_contours(bbox_line, simplified_lines)
 
@@ -161,6 +164,7 @@ def create_dxf_drawings(dem, contour_interval, model_width, output_directory, si
                 #continue
 
             msp.add_lwpolyline(pts_model.tolist())
+        '''
 
         if msp:  # only save CAD file if polylines were added
             output_path = f'{output_directory}/contours{int(level)}.dxf'

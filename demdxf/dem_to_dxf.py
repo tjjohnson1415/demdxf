@@ -1,6 +1,7 @@
 import numpy as np
 from skimage import measure
 from shapely.geometry import Point, LineString, Polygon
+from shapely.ops import split, unary_union
 import ezdxf
 import matplotlib.pyplot as plt
 from demdxf.dem_preprocessing import display_dem
@@ -59,6 +60,16 @@ def _process_and_add_lines_to_msp(lines, msp, scaling_factor):
         plt.plot(x, y, color = 'red')
 
 
+def split_bbox_by_contours(bbox_polygon, contour_lines):
+    # merge all contour lines into one geometry
+    merged = unary_union(contour_lines)
+
+    # split the bounding box by the merged contour geometry
+    result = split(bbox_polygon, merged)
+
+    return list(result)
+
+
 def create_dxf_drawings(dem, contour_interval, model_width, output_directory, simplify_tolerance = 1):
     '''
     Function for converting DEMs to DXF drawings
@@ -97,11 +108,27 @@ def create_dxf_drawings(dem, contour_interval, model_width, output_directory, si
         _process_and_add_lines_to_msp(simplified_lines, msp, scaling_factor)
         
         h, w = dem.shape
+        '''
         bbox_dem_points = np.array([
             [0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1], [0, 0]
         ])
         bbox_model_points = bbox_dem_points * 1000 * scaling_factor
         msp.add_lwpolyline(bbox_model_points.tolist())
+        '''
+
+        # Create bounding box polygon in DEM coordinates
+        bbox_poly = Polygon([
+            (0, 0), (w - 1, 0), (w - 1, h - 1), (0, h - 1)
+        ])
+        
+        # Split bounding box by contour lines
+        bbox_pieces = split_bbox_by_contours(bbox_poly, simplified_lines)
+        
+        # Add each piece to DXF
+        for piece in bbox_pieces:
+            pts = np.array(piece.exterior.coords)
+            pts_model = pts * 1000 * scaling_factor
+            msp.add_lwpolyline(pts_model.tolist(), close=True)
             
         if msp: #only save CAD file if polylines were added
             output_path = f'{output_directory}/contours{int(level)}.dxf'

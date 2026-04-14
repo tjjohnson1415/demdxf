@@ -16,7 +16,9 @@ dependencies = [
 	"matplotlib",
 	"rasterio",
 	"laspy",
+	"lazrs",
 	"scipy",
+	"pyproj",
 ]
 
 [build-system]

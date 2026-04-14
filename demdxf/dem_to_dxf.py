@@ -141,7 +141,7 @@ def create_dxf_drawings(dem, contour_interval, model_width, output_directory, si
             (0, 0)
         ])
 
-        msp.add_lwpolyline(bbox_line.tolist())
+        msp.add_lwpolyline(list(bbox_line.coords))
 
         '''
         # Split bounding box line by contour lines

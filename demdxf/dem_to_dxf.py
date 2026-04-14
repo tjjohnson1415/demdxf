@@ -146,14 +146,22 @@ def create_dxf_drawings(dem, contour_interval, model_width, output_directory, si
                 polys = [piece]
         
             for poly in polys:
-                # Skip empty or invalid geometries
                 if not isinstance(poly, Polygon):
                     continue
                 if poly.is_empty:
                     continue
-        
+            
+                # Only keep pieces that touch the original bbox boundary
+                if not poly.boundary.intersects(bbox_poly.boundary):
+                    continue
+            
                 pts = np.array(poly.exterior.coords)
                 pts_model = pts * 1000 * scaling_factor
+                poly_model = Polygon(pts_model)
+            
+                if poly_model.area < 100:
+                    continue
+            
                 msp.add_lwpolyline(pts_model.tolist(), close=True)
             
         if msp: #only save CAD file if polylines were added

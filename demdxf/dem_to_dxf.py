@@ -132,6 +132,14 @@ def create_dxf_drawings(dem, contour_interval, model_width, output_directory, si
 
         h, w = dem.shape
 
+        ### working on editing this
+        bbox_dem_points = np.array([
+            [0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1], [0, 0]
+        ])
+        bbox_model_points = bbox_dem_points * 1000 * scaling_factor
+        msp.add_lwpolyline(bbox_model_points.tolist())
+
+        '''
         # Create bounding box as a LineString in DEM coordinates
         bbox_line = LineString([
             (0, 0),
@@ -141,9 +149,6 @@ def create_dxf_drawings(dem, contour_interval, model_width, output_directory, si
             (0, 0)
         ])
 
-        msp.add_lwpolyline(list(bbox_line.coords))
-
-        '''
         # Split bounding box line by contour lines
         bbox_segments = split_bbox_line_by_contours(bbox_line, simplified_lines)
 
